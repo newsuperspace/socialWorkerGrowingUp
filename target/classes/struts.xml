@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE struts PUBLIC
+        "-//Apache Software Foundation//DTD Struts Configuration 2.5//EN"
+        "http://struts.apache.org/dtds/struts-2.5.dtd">
+
+<struts>
+	<constant name="struts.ui.theme" value="simple"></constant>
+	<constant name="struts.devMode" value="true" />
+	<constant name="struts.enable.DynamicMethodInvocation" value="false" />
+	
+	 <!-- 
+	 	★★★设置Struts2功能入口的filter过滤规则的额外规则（排除在外的规则）
+	 	这样当前端页面通过ws://localhost/library/ws/websocket的URL发来WebSocket请求的时候
+	 	该请求就会被struts2的filter忽视掉了，因此会被SpringMVC的入口（一个sevlet）处理到。
+	  -->
+	<constant name="struts.action.excludePattern" value="/ws/.*,ws://.*"></constant> 
+	
+	<include file="struts/struts-user.xml"></include>
+	<include file="struts/struts-try.xml"></include>
+		
+		
+	<!-- 
+		定义一个基础包，该包将是所有子struts配置文件中声明的包的父包
+		介于项目可能使用到前端的ajax（通过jQuery的$.post()）技术来与我们的服务器端进行交互，
+		而服务器端返回JSON格式数据的时候需要使用到struts-json-plugin.jar中提供的名为“json”
+		的结果集的转换（将位于栈顶的持久化状态对象为元素的容器进行遍历扫描，将属性与属性值转变为[{},{},...{}]的json格式字符串）
+		过程，然后回传给前端，前端就能通过$.post()的回调函数的data参数以JSON对象的方式直接获取从服务器端传递过来的数据了。
+		
+		因此我们所定义base-package 中将拥有json-default包中所定义的所有结果集（主要就是json结果集索引字符串的使用权）、interceptor等
+		并且我们还能在base-package中增加我们自己定义的一些拦截器（比如允许响应跨域请求的accessControlAllowOriginInterceptor拦截器）
+		这样当定义action的xml配置文件的时候，就能通过extend这个基础包，从而有权使用包括：自定义拦截器栈、json结果集索引等在内的全部继承内容
+	 -->
+	<package name="base-package" namespace="/" extends="json-default">
+		
+		<interceptors>
+			<!-- 引入自定义的拦截器 -->
+			<interceptor name="accessControlAllowOriginInterceptor" class="top.nat200.ddaig.interceptor.AccessControlAllowOriginInterceptor"></interceptor>
+			
+			<!-- 声明“拦截器栈”，引入其他拦截器或自定义拦截器，规定拦截器执行顺序 -->
+			<interceptor-stack name="myInterceptor">
+				<!-- 
+					引入父包中的拦截器栈中的所有拦截器到本包中的拦截器栈中来。
+				 -->
+				<interceptor-ref name="defaultStack"></interceptor-ref>
+				<!-- 
+					在这之后放置我们自定义的拦截器(注意，是有先后顺序的)				
+			 	-->
+			 	<interceptor-ref name="accessControlAllowOriginInterceptor"></interceptor-ref>
+			 	
+			</interceptor-stack>
+			
+		</interceptors>
+		
+		<!-- 本自定义基础包——base-package 默认使用的“拦截器栈”是什么 -->
+		<default-interceptor-ref name="myInterceptor"></default-interceptor-ref>
+		
+		<!-- 
+			全局结果集
+			继承自当前package的子包中的action中声明的结果集中无需显式写出 <result name="error">error.jsp</result>这个结果集分支
+			就能默认拥有该结果集请求转发分支。
+			这样做有利于对所有action都需要使用的结果集进行批量配置，无需重复为每个Action的结果集书写相同结果集分支。
+		 -->
+		<global-results>
+			<result name="error" >error.jsp</result>
+		</global-results>
+	</package>
+</struts>    

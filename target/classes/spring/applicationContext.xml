@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:websocket="http://www.springframework.org/schema/websocket"
+	xmlns:p="http://www.springframework.org/schema/p" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.3.xsd
+		http://www.springframework.org/schema/tx    http://www.springframework.org/schema/tx/spring-tx-4.3.xsd
+        http://www.springframework.org/schema/websocket http://www.springframework.org/schema/websocket/spring-websocket-4.3.xsd">
+
+	<!-- =========================================SPRING=========================================== -->
+	<!-- ★★注解解析器（DI注入）★★ 类扫描 就因为下面这句类扫描，再配合存在于Action层（@Controller）、Service层（@Service）和Dao层（@Repository）类以及 
+		其中需要DI注入的引用类型属性上的“@Resource(name="需要注入的Bean的ID")”注解。 就可以让Spring自动根据这些注解完成IOC和DI注入的配置工作（也就是Bean的配置工作），无需我们再手写一大堆的Bean配置信息了， 
+		非常方便地就完成了基于注解和类扫描的“IOC和DI注入配置” -->
+	<context:component-scan base-package="top.nat200.ddaig">
+	</context:component-scan>
+
+
+	<!-- ★★注解解析器（Bean初始化和销毁）★★ 告诉spring 容器采用注解配置：扫描注解配置 如此配置之后，在各个Bean类中的@PostConstruct 
+		和 @PreDestory注解就会生效 @PostConstruct public void init(){ System.out.println("在方法所属Bean类构造出来之后自动执行init()方法，实现初始化工作"); 
+		} @PreDestroy public void distory(){ System.out.println("在方法所属Bean类销毁之前自动调用distory()方法，实现收官工作"+message); 
+		} -->
+	<context:annotation-config />
+
+	<!-- =========================================HIBERNATE=========================================== -->
+	<!-- 数据源的bean -->
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+		destroy-method="close" p:driverClass="com.mysql.jdbc.Driver"
+		p:jdbcUrl="jdbc:mysql://localhost:3306/socialworker" p:password="root"
+		p:user="root" />
+
+	<!-- Hibernate框架的关键对象——SessionFactory 当前Spring容器掌管Hibernate的切入点，SessionFactory是Hibernate容器，Spring通过将其纳入到Spring成为Spring的Bean 
+		这样就掌握了对Hibernate容器的创建工作，而Hibernate容器会在初始化的过程中自动完成它自己的哪一部分工作，无需我们再分精力 考虑Hibernate了。 -->
+	<bean id="sessionFactory"
+		class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+		<!-- 因为sessionFactory是Hibernate容器对象，从中可以获得session对象从而与数据库进行CRUD操作 因此这里就必须导入hibernate.cfg.xml配置文件，才能根据配置文件成功创建出Hibernate容器。 -->
+		<property name="configLocation" value="classpath:hibernate/hibernate.cfg.xml"></property>
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+
+	<!-- Spring基于“模板设计模式”封装Hibernate的API形成的数据库操作框架——HibernateTemplate Dao层中的所有类都需要DI注入本Bean才能通过它来调用Hibernate框架的接口实现与数据库的交互。 
+		所以Dao层中的所有类（不论是基本抽象类BaseDaoImpl还是各种实现类型）都需要预留有引用该对象的属性，然后在Spring容器 创建该Dao类的时候，通过Di注入将这个HibernateTemplate注入到Dao类中，这样Dao类中的方法就能通过预留的引用该模板类 
+		的属性来调用Hibernate的API实现数据库的CRUD操作了。 -->
+	<bean id="hibernateTemplate" class="org.springframework.orm.hibernate5.HibernateTemplate">
+		<!-- 模板类封装了Hibernate对数据库操作的常用API，由于Hibernate操作数据库必须通过session对象来伤心啊 因此模板类也必须拥有session对象，而session对象是Hibernate容器产生的，因此这里就必须DI注入Hibernate容器。 -->
+		<property name="sessionFactory">
+			<ref bean="sessionFactory" />
+		</property>
+	</bean>
+
+	<!-- Spring的声明式事务处策略 的配置——用来声明一个针对特定JDBC框架（当前工程为Hibernate）的事务管理器，该管理器要供给下方的事务处理策略类扫描使用 
+		在这里根据当前项目所使用的JDBC框架（现在使用的是Hibernate），选择Spring已经为你实现好的对应的TransactionManager事务管理器， 
+		并向其中DI注入要发挥该JDBC框架的数据库操作功能就必须给出的“关键对象”——Hibernate框架的关键对象就是SessionFactory，而原生 
+		JDBC的关键对象就是数据源连接池对象。 这样与该JDBC框架有关的所有与数据库的CRUD操作都可以通过这个事务管理器来进行事务管理了，接下来就是结合Spring的有一个最为核心和重要的 
+		技术——AOP面向切面编程技术，使用“注解”来标记出Service层中的哪些类在调用的时候需要纳入到事务管理器的事务管理范畴中，因为这些Service层 
+		的类调用者Dao层，因此只要将其纳入到事务管理中就意味着将数据库操作也纳入到事务管理中，并且在Service层遇到问题的时候就可以提早进行RollBack 
+		回滚操作，来避免服务器端与数据库因为一些异常错误导致的数据库数据的不安全性。 -->
+	<bean id="transactionManager"
+		class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+		<property name="sessionFactory">
+			<ref bean="sessionFactory" />
+		</property>
+	</bean>
+
+
+	<!-- ★★注解解析器（声明式事务处理）★★ 基于AOP技术实现的声明式事务处理策略的类扫描 当在工程中的某个类或某个方法上添加@Transactional(readOnly=true); 
+		该注解可以放在单独的方法上（只对该方法执行事务处理），也可以放在类上（对类中的所有方法执行事务处理）
+		注解的时候，就会被当前这个事务处理扫描器，扫描下来。 类似于通过类扫描配合注解（@Service、@Controller、@Repository）可以自动建立IOC和DI注入（无需在当前配置文件中手动添加Bean）， 
+		通过@Transaction和本扫描器也可以瞬间完成对“声明式事务处理策略”的配置。 凡事有该注解的类或继承拥有该注解类的子类作为Spring容器的Bean被创建的时候，会以动态代理将其封装，并对类中所有方法（注解在类上）或标注有 
+		该注解的方法在被调用的时候进行AOP编程，将其中的逻辑代码夹在session.beginTransaction()和transaction.Commit()的事务管理之下，从而完成 
+		基于注解和类扫描的“声明式事务处理”。 AOP编程的基础就是——动态代理或静态代理（装饰或适配器） -->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+ 
+
+</beans>

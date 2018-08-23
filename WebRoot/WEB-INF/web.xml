@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://xmlns.jcp.org/xml/ns/javaee" xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd" id="WebApp_ID" version="3.1">
+  <display-name>socialWorkerGrowingUp</display-name>
+  <!-- 当在浏览器中只输入 “域名/weixin” 时会访问本应用程序，以下列出了负责默认提供相应的可选页面（/WebRoot）目录之下 -->
+	<welcome-file-list>
+		<welcome-file>index.jsp</welcome-file>
+	</welcome-file-list>
+
+
+	<!-- 自定义的监听，当系统启动时会执行其中的逻辑，负责进行与微信端有关的初始化工作，并将必要信息存放在ServletContext领域中备用 -->
+	<listener>
+		<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+	</listener>
+	<context-param>
+		<param-name>contextConfigLocation</param-name>
+		<param-value>classpath:spring/applicationContext.xml</param-value>
+	</context-param>
+
+
+	<!-- 本过滤器是由Spring提供，负责对每次访问的，有关Hibernate的Session进行全局管控。防止出现在获取懒加载数据时由于session被提前关闭（通常在Dao方法调用结束就被自动关闭）而导致no 
+		session异常的产生 -->
+	<filter>
+		<filter-name>OpenSessionInViewFilter</filter-name>
+		<filter-class>org.springframework.orm.hibernate5.support.OpenSessionInViewFilter</filter-class>
+	</filter>
+	<filter-mapping>
+		<filter-name>OpenSessionInViewFilter</filter-name>
+		<!-- 
+			2018年8月5日，今天把已经完成的双Realm（myRealm用来验证扫码登陆/myRealm4Input用来验证用户名密码登陆）的系统接入到微信中后，新建菜单也已经生效。这个时候当我点击微信端登陆系统后台的时候出现了一个奇怪的问题
+org.hibernate.LazyInitializationException: failed to lazily initialize a collection of role: cc.natapp4.ddaig.domain.Manager.zls, could not initialize proxy - no Session
+这是一个Hibernate中非常经典的no session异常，我之前很奇怪不仅仅是因为已经在系统中部署了Spring提供的同意管理session的OpenSessionInView过滤器，还因为在测试版本中这个微信端直接登陆系统后台的功能是正常的。该异常发生的位置是在调用myRealm.doGetAuthorizationInfo()获取权限列表的时候出现的，我原本以为Shiro会一次性同时调用doGetAuthenticationInfo()和doGetAuthorizationInfo()两个方法，但经过我在网上查阅资料后才知道，登陆时会调用doGetAuthenticationInfo()完成认证，但不会继续调用doGetAuthorizationInfo()，而是等到JSP的shiro标签/applicationContext的shiro过滤器链条中规定某个url需要某种权限/shiro在类的方法上的权限注解并且该方法被调用，这三种情况发生的时候才会执行doGetAuthorizationInfo()这其实也是一种懒加载策略。
+知道这一点后我明白了，no session异常发生的位置不会是doGetAuthentication()认证的阶段，而是在之后比如说认证完成后的请求重定向或请求转发的访问阶段出发了doGetAuthorizationInfo()进行授权的时候发生的，于是我查看了控制台打印的信息，发现在shiroAction_login.action自动登陆成功后会通过action中的名为wxUrl的属性进行动态结果集的请求重定向，二改wxUrl的打印地址是
+“最终存入Session的完整wxURL：http://ddaig.nat200.top/weixin/?code=071LgoS22lA90Y0wF7Q22qudS22LgoSY&state=”  我们看到这个连接不是*.action格式，而我在web.xml定义OpenSessionInView过滤器的时候规定的过来规则是"*.action"，至此问题已经很明了了，我们wxURL所请求转发的路径没有出发openSessionInView，自然在doGetAuthorizationInfo中通过userService.queryEntityByOpenID() 得到user后session就关闭了，由于user.manager不是拦截在因此还是可以得到manager的（不需要通过session从数据库中请求），但是manager中的所有容器缺失在HBM中设定为了懒加载，当我们获取容器的时候由于session已经关闭，自然就会报出 no session的异常。
+而测试版本之所以能正常，是因为测试版本的wxURL所请求的是directPageAction，而该action在新版本的系统中已经弃用了。
+因此该问题的解决办法就是设置OpenSessionInView拦截器的规则为"/*"
+		 -->
+		<!--  <url-pattern>*.action</url-pattern> -->
+		<url-pattern>/*</url-pattern>
+	</filter-mapping>
+
+
+	<!-- 这里是Struts2框架的系统功能入口 -->
+	<filter>
+		<filter-name>struts2</filter-name>
+		<filter-class>org.apache.struts2.dispatcher.filter.StrutsPrepareAndExecuteFilter</filter-class>
+	</filter>
+	<filter-mapping>
+		<filter-name>struts2</filter-name>
+		<url-pattern>/*</url-pattern>
+	</filter-mapping>
+
+</web-app>

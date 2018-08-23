@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:websocket="http://www.springframework.org/schema/websocket"
+	xmlns:p="http://www.springframework.org/schema/p" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-4.3.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-4.3.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-4.3.xsd
+		http://www.springframework.org/schema/tx    http://www.springframework.org/schema/tx/spring-tx-4.3.xsd
+        http://www.springframework.org/schema/websocket http://www.springframework.org/schema/websocket/spring-websocket-4.3.xsd">
+
+	<!-- =========================================SPRING=========================================== -->
+	<!-- ★★注解解析器（DI注入）★★ 类扫描 就因为下面这句类扫描，再配合存在于Action层（@Controller）、Service层（@Service）和Dao层（@Repository）类以及 
+		其中需要DI注入的引用类型属性上的“@Resource(name="需要注入的Bean的ID")”注解。 就可以让Spring自动根据这些注解完成IOC和DI注入的配置工作（也就是Bean的配置工作），无需我们再手写一大堆的Bean配置信息了， 
+		非常方便地就完成了基于注解和类扫描的“IOC和DI注入配置” -->
+	<context:component-scan base-package="cc.natapp4.ddaig">
+	</context:component-scan>
+
+
+	<!-- ★★注解解析器（Bean初始化和销毁）★★ 告诉spring 容器采用注解配置：扫描注解配置 如此配置之后，在各个Bean类中的@PostConstruct 
+		和 @PreDestory注解就会生效 @PostConstruct public void init(){ System.out.println("在方法所属Bean类构造出来之后自动执行init()方法，实现初始化工作"); 
+		} @PreDestroy public void distory(){ System.out.println("在方法所属Bean类销毁之前自动调用distory()方法，实现收官工作"+message); 
+		} -->
+	<context:annotation-config />
+
+
+	<!-- =========================================SHIRO=========================================== -->
+	<!-- 下面需要用到logout过滤器，因此要提前配置logout过滤器，用来指定Shiro退出登录后的跳转连接 -->
+	<bean id="logoutFilter" class="org.apache.shiro.web.filter.authc.LogoutFilter">
+		<property name="redirectUrl" value="/openJSP/signin.jsp" />
+	</bean>
+	<!-- Shiro功能的主控发起点，该Bean实例内会DI注入一个Shiro容器实例——SecurityManager从而实现全部Shiro安全管控功能 -->
+	<bean lazy-init="true" id="shiroFilter"
+		class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">
+		<property name="securityManager" ref="securityManager" />
+		<!-- 
+			★★ 重要 ★★
+			在下方的filterChainDefinitions 过滤器规则定义链条中定义了对哪些URL路径的访问采取何种过滤器原则
+			如果前端来访者所要访问的url是需要authc过滤器规则的，则说明任何对该形态URL的请求都必须进行登录操作。
+			登录操作就会自动跳转到loginUrl属性所配置的路径上去执行，
+			这个值可以是形如："/openJSP/signin.jsp" 的JSP页面路径
+			也可以是 "shiroAction_login.action" 这样action请求
+			无论是哪一种，当判定某次需要登录的时候shiro就会将请求转发到这个url去
+		-->
+		<property name="loginUrl" value="/shiroAction_login.action" /> 
+		<property name="unauthorizedUrl" value="/openJSP/unauthorized.jsp" />
+		<!-- 配置 过滤器简称 的 映射 -->
+		<property name="filters">
+			<map>
+				<entry key="logout"  value-ref="logoutFilter"></entry>
+				<entry key="anyPerms"  value-ref="permissionsAuthorizationFilter"></entry>
+			</map>
+		</property>
+		<!-- 配置 外部访问特定URL时，需要经过的过滤器、需要的“角色”或“权限”。这是Shiro进行权限配置的核心点 ★ -->
+		<property name="filterChainDefinitions">
+			<value>
+				<!-- 
+					值得注意的事儿 【1】★★★ 在所有认证配置中，必须在最开头加上authc，
+					表示需要先进行身份认证。否则如果退出系统后再访问系统就不会再次进行身份认证，
+					这不是我们想要的
+				 -->
+				<!-- perms 表示需要该权限才能访问的页面 -->
+			<!--  	/directPageAction.action=authc,roles[admin]   -->
+			<!--   	/directPageAction.action=authc,perms[system:access] -->
+			<!-- 
+				由于为了整个系统安全我们通过 "/**=authc" 实现外部对整个系统的任何部分请求都要通过认证
+				于是会跳转到我们指定的 loginUrl的页面上进行登陆操作。
+				但是这样的页面通常会需要大量静态资源，例如css样式表/JS脚本/图片等，但是由于对整个系统的
+				访问都需要提前通过认证，这也包括静态资源的请求，因此会导致登陆页面由于获取不到所需要的静
+				态资源而出现视觉上的硬伤。
+				解决办法就是对无关安全痛痒的静态资源给予“放行”，就像下面我们所做的那样，通过标注anon使得
+				任何人在请求localhost/weixin/css/xx/xx/x/x等静态资源时都会被“放行”
+			 -->	
+				/css/**=anon
+				/fonts/**=anon
+				/img/**=anon
+				/js/**=anon
+				/qrcode/**=anon
+				/openJSP/**=anon
+				/jqueryui/**=anon
+				<!-- temp中存放的是用于登录用的临时二维码，也属于静态资源所以要"豁免shiro" -->
+				/temp/** = anon
+				
+				<!-- Websocket的访问方式也会收到Shiro的拦截，因此也必须豁免所有/ws的访问方式 -->
+				/ws/** = anon
+				
+				<!-- 
+					★★★★★shiro豁免
+					weixinAction用来响应从微信端服务器来的请求，例如recall()方法作为微信端公众号的入口，因此必须“无偿开放”
+					不能被Shiro限制住
+				 -->
+				/weixinAction_*.action = anon
+				<!-- 同上前端页面涉及与微信端的交互时（例如：通过code换取openID，获得JS-SDK的使用权等）需要请求本action -->
+				/ajaxAction4weixin_*.action = anon
+				<!-- 用户通过微信段访问用户中心、进行实名认证等操作都需要请求本action，因此需要豁免shiro -->
+				/personalCenterAction_*.action = anon
+				<!-- 
+					★★★★★
+					因为"/shiroAction_login.action" 作为shiro在认证（登录）的loginUrl的配置路径，也就是说一旦遇到需要认证的路径
+					就会请求转发到shiroAction_login.action 因此这里也必须设置shiroAction中的方法“无偿”被访问，否则就会让前端陷入死循环的请求转发中。
+					同时，shiroAction_getLoginQR.action 是作为登陆页面/openJSP/signin.jsp中通过jQuery的$.ready()自动执行的初始化操作中所访问的，作用
+					是从咱们的后端获取用于登录的临时二维码，如果shiroAction被限制需要登录后访问，而由于shiroAction_getLoginQR是在登录页面上请求的因此
+					登陆者永远没有机会获取到二维码（需要登录后才能有权访问shiroAction_getLoginQR，但是登陆必须先依靠shiroAction_getLoginQR获取二维码
+					这就是一个死局）
+					综上所述，当前系统中也必须完全放开 对于/shiroAction中所有方法的访问
+					★★★★★
+				 -->
+				/shiroAction_*.action = anon
+			<!-- 
+				/logout 对应于 filters中声明好的 key="logout"的过滤器，该过滤器的具体配置引用自
+				id="logoutFilter"的过滤器配置，其中的redirectUrl所配置的就是系统退出后跳转的页面。
+				而前端页面只需要通过访问http://localhost/weixin/logout 就能被本过滤器拦截，然后自动执行注销
+				最后跳转到redirectUrl所配置的页面上（通常是登录页面或者主页）。
+				非常方便的就完成了注销和退出系统的操作。
+			 -->
+				/logout=logout
+			<!-- 
+				为了系统安全，外部任何请求本系统的操作都需要通过认证，例如：
+				localhost/weixin/**  包含了对如下形式的请求匹配
+				①localhost/weixin/userAction_xxxx.action
+				②localhost/weixin/openJSP/xxxx.jsp
+				③localhost/weixin/css/1/2/3/4/5/../n/xxx.css
+				....
+			 -->
+			 <!-- 
+			 	在配置perms[] 或者role[] 的时候，如果需要同时匹配2个及以上的权限，那么必须先用""引号括起来，然后
+			 	权限与权限之间使用,逗号分隔开来，例如：
+			 	/**=authc,perms["all:system:access4desk,all:system:access4weixin"]
+			 	注意如此配置时，访问者的权限必须同时都拥有才能认证成功！
+			  -->
+			  <!-- 
+			  	整个filterChainDefinitions链条遵循从上到下匹配的原则，只要找到匹配的原则就通过，之后的过滤器就不再看了
+			  	如果本次来访不是访问链条中最上部分的静态资源，也不是logout退出，那么就是要访问系统。
+			  	对于访问系统后台的请求就需要遵循下面的过滤器规则
+			  	（1）authc——先登录系统
+			  	（2）anyPerms——是自定义的过滤器，表明只要拥有admin,all:systemaccess4desk,all:system:access4weixin中的任何一项权限，并且
+			  	与实际访问方式相符合（确实是用微信或桌面端访问的）
+			  	只要同时符合以上两点规则就能顺利访问系统后台
+			  	
+			  	★★★
+			  	对于当前访问是从微信端还是桌面端发来的，并且实际访问方式是否与来访者相符的判断都是通过我们自定义的shiro过滤器 permissionsAuthorizationFilter
+			  	完成的。
+			   -->
+				/**=authc,anyPerms[admin,all:system:access4desk,all:system:access4weixin]
+			</value>
+		</property>
+	</bean>
+	<!-- 配置Shiro主控中心——securityManager -->
+	<bean lazy-init="true" id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+		<!-- 
+			securityManager中有一个名为authenticator的属性，该属性用来存放分派管理多Realm的模块对象
+			该模块对象的具体说明，请见下方的myModularRealm的bean上的注释以及该类中的解释说明
+		 -->
+		<property name="authenticator" ref="myAuthenticator"></property>
+		
+		<!-- 
+			配置自定义Realm(已经通过注解置于Spring容器的IOC之下)，这非常重要★
+			由于当前系统中需要根据不同业务情景用到两个Realm，分别是
+			（1）处理微信登陆方式的myReal；
+			（2）处理测试阶段传统登陆方式的myReal4Input；
+			因此我们使用securityManager的realms这个List类型的容器属性，存放需要用到的所有realm的bean
+			对于多Realms，该realms容器会最终赋值给myModularRealm
+		 -->
+		<property name="realms">
+			<list>
+				<ref bean="myRealm"/>
+				<ref bean="myRealm4Input"/>
+			</list>
+		</property>
+		
+		<!-- 配置session管理器 -->
+		<property name="sessionManager" ref="sessionManager"></property>
+	</bean>
+	<!-- 由于当前工程是web工程，因此这里使用基于Servlet的HttpSession用作Shiro的session -->
+	<bean lazy-init="true" id="sessionManager"
+		class="org.apache.shiro.web.session.mgt.ServletContainerSessionManager"></bean>
+	<!-- 配置Shiro的声明周期进程（哦也不知道用什么用，反正是标准写法） -->
+	<bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor" />
+
+	<!-- 
+		一个系统中需要同时又多个realm用来分别处理不同认证情景或共同处理同一个认证情景的时候
+		就需要一个继承自ModularRealmAuthenticator的实现类，用来控制什么情况下调用什么realm的
+		业务需要，该Modular将会交给securityManager来自动调用。
+	 -->
+	<bean id="myAuthenticator" class="cc.natapp4.ddaig.security.MyModularRealmAuthenticator" lazy-init="true">
+		 <!-- 配置认证策略，只要有一个Realm认证成功即可，并且返回所有认证成功信息 -->
+        <property name="definedRealms">
+            <map>
+                <entry key="myRealm" value-ref="myRealm" />
+                <entry key="myRealm4Input" value-ref="myRealm4Input" />
+            </map>
+        </property>
+        <!-- ce lue -->
+        <property name="authenticationStrategy">
+            <bean class="org.apache.shiro.authc.pam.FirstSuccessfulStrategy" />
+        </property>
+	</bean>
+
+	<!-- =========================================HIBERNATE=========================================== -->
+	<!-- 数据源的bean -->
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"
+		destroy-method="close" p:driverClass="com.mysql.jdbc.Driver"
+		p:jdbcUrl="jdbc:mysql://localhost:3306/weixin" p:password="root"
+		p:user="root" />
+
+	<!-- Hibernate框架的关键对象——SessionFactory 当前Spring容器掌管Hibernate的切入点，SessionFactory是Hibernate容器，Spring通过将其纳入到Spring成为Spring的Bean 
+		这样就掌握了对Hibernate容器的创建工作，而Hibernate容器会在初始化的过程中自动完成它自己的哪一部分工作，无需我们再分精力 考虑Hibernate了。 -->
+	<bean id="sessionFactory"
+		class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+		<!-- 因为sessionFactory是Hibernate容器对象，从中可以获得session对象从而与数据库进行CRUD操作 因此这里就必须导入hibernate.cfg.xml配置文件，才能根据配置文件成功创建出Hibernate容器。 -->
+		<property name="configLocation" value="classpath:hibernate/hibernate.cfg.xml"></property>
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+
+	<!-- Spring基于“模板设计模式”封装Hibernate的API形成的数据库操作框架——HibernateTemplate Dao层中的所有类都需要DI注入本Bean才能通过它来调用Hibernate框架的接口实现与数据库的交互。 
+		所以Dao层中的所有类（不论是基本抽象类BaseDaoImpl还是各种实现类型）都需要预留有引用该对象的属性，然后在Spring容器 创建该Dao类的时候，通过Di注入将这个HibernateTemplate注入到Dao类中，这样Dao类中的方法就能通过预留的引用该模板类 
+		的属性来调用Hibernate的API实现数据库的CRUD操作了。 -->
+	<bean id="hibernateTemplate" class="org.springframework.orm.hibernate5.HibernateTemplate">
+		<!-- 模板类封装了Hibernate对数据库操作的常用API，由于Hibernate操作数据库必须通过session对象来伤心啊 因此模板类也必须拥有session对象，而session对象是Hibernate容器产生的，因此这里就必须DI注入Hibernate容器。 -->
+		<property name="sessionFactory">
+			<ref bean="sessionFactory" />
+		</property>
+	</bean>
+
+	<!-- Spring的声明式事务处策略 的配置——用来声明一个针对特定JDBC框架（当前工程为Hibernate）的事务管理器，该管理器要供给下方的事务处理策略类扫描使用 
+		在这里根据当前项目所使用的JDBC框架（现在使用的是Hibernate），选择Spring已经为你实现好的对应的TransactionManager事务管理器， 
+		并向其中DI注入要发挥该JDBC框架的数据库操作功能就必须给出的“关键对象”——Hibernate框架的关键对象就是SessionFactory，而原生 
+		JDBC的关键对象就是数据源连接池对象。 这样与该JDBC框架有关的所有与数据库的CRUD操作都可以通过这个事务管理器来进行事务管理了，接下来就是结合Spring的有一个最为核心和重要的 
+		技术——AOP面向切面编程技术，使用“注解”来标记出Service层中的哪些类在调用的时候需要纳入到事务管理器的事务管理范畴中，因为这些Service层 
+		的类调用者Dao层，因此只要将其纳入到事务管理中就意味着将数据库操作也纳入到事务管理中，并且在Service层遇到问题的时候就可以提早进行RollBack 
+		回滚操作，来避免服务器端与数据库因为一些异常错误导致的数据库数据的不安全性。 -->
+	<bean id="transactionManager"
+		class="org.springframework.orm.hibernate5.HibernateTransactionManager">
+		<property name="sessionFactory">
+			<ref bean="sessionFactory" />
+		</property>
+	</bean>
+
+
+	<!-- ★★注解解析器（声明式事务处理）★★ 基于AOP技术实现的声明式事务处理策略的类扫描 当在工程中的某个类或某个方法上添加@Transactional(readOnly=true); 
+		该注解可以放在单独的方法上（只对该方法执行事务处理），也可以放在类上（对类中的所有方法执行事务处理）
+		注解的时候，就会被当前这个事务处理扫描器，扫描下来。 类似于通过类扫描配合注解（@Service、@Controller、@Repository）可以自动建立IOC和DI注入（无需在当前配置文件中手动添加Bean）， 
+		通过@Transaction和本扫描器也可以瞬间完成对“声明式事务处理策略”的配置。 凡事有该注解的类或继承拥有该注解类的子类作为Spring容器的Bean被创建的时候，会以动态代理将其封装，并对类中所有方法（注解在类上）或标注有 
+		该注解的方法在被调用的时候进行AOP编程，将其中的逻辑代码夹在session.beginTransaction()和transaction.Commit()的事务管理之下，从而完成 
+		基于注解和类扫描的“声明式事务处理”。 AOP编程的基础就是——动态代理或静态代理（装饰或适配器） -->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+
+
+	
+ 
+	<!-- =========================SpringMVC（SpringMVC完全可以代替Struts2，但目前我只使用了WebSocket功能，真是可惜！）============================ -->
+	
+	<!-- 通过SpringMVC框架入口（一个配置在当前工程中的web.xml中的一个servlet）来处理前端提交来的websocket协议请求 
+		而判断到是websocket协议后就会提交给下面的配置来处理。 allowed-prigins属性 是实现跨域请求的 path属性定义的值是 /login，该属性将与web.xml中配置的SpringMVC入口的servlet类的<url-pattern>中的url映射的/ws/*的“*”相对应 
+		共同构成以后前端可以使用的连接当前服务器的ws://ddaig.natapp4.cc/weixin/ws/login 的URL的相对路径部分。这是一个坑，一定要注意★ -->
+
+	
+
+</beans>

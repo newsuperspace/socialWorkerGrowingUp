@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE struts PUBLIC
+        "-//Apache Software Foundation//DTD Struts Configuration 2.5//EN"
+        "http://struts.apache.org/dtds/struts-2.5.dtd">
+
+<!-- 
+	首先，由于我将Struts2的版本从2.3升级到了2.5，因此为了能够使用新版本的特性，文档头中的DTD约束必须也使用最新的2.5
+	其次，新加入的特性是对于使用了通配符action，也就是"action的名称_*",后面通常都是action类的方法名，在2.3中可以直接
+	这样使用没有任何问题，但是在2.5.x版本中，如果我们不通过
+	在<package>中设置strict-method-invocation="false"属性（默认为true）   或
+	在<action>中配置<allowed-methods>方法名1,方法名2,...方法名n</allowed-methods>
+	的话就会爆出  
+	There is no Action mapped for namespace [/] and action name [userAction_getUserList] associated with context path [/weixin].
+	的异常，这里需要特别注意。
+	详细的信息可见： https://blog.csdn.net/jimo_lonely/article/details/52495532
+ -->
+
+<struts>
+	<package name="user" namespace="/" extends="base-package" strict-method-invocation="false">
+		<action name="userAction_*"  method="{1}"   class="userAction">
+				<result>/index.jsp</result>
+				<result name="list" >/WEB-INF/pages/right/user/userList.jsp</result>
+				<result name="managerList" >/WEB-INF/pages/right/user/managerList.jsp</result>
+				<result name="exchangeList" >/WEB-INF/jsp/frame/aboutExchange/exchangeList.jsp</result>
+				<result  name="json"  type="json"></result>
+		</action>
+	</package>
+</struts>
