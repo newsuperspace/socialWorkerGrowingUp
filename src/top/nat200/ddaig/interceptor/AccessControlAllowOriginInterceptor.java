@@ -52,6 +52,7 @@ public class AccessControlAllowOriginInterceptor implements Interceptor {
 //		request.setCharacterEncoding("UTF-8");
 		// 设置允许跨域请求的响应头
 		response.setHeader("Access-Control-Allow-Origin", "*");
+		System.out.println("Access-Control-Allow-Origin");
 		// 设置响应头，告诉浏览器以何种码表对响应正文进行解码
 //		response.setContentType("text/html;charset=gb2312");
 
