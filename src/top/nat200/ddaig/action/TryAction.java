@@ -10,6 +10,7 @@ import org.apache.struts2.ServletActionContext;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
+import com.google.zxing.Result;
 import com.opensymphony.xwork2.ActionContext;
 import com.opensymphony.xwork2.ActionSupport;
 
@@ -19,24 +20,31 @@ import top.nat200.ddaig.json.Json4FullCalendar;
 @Scope("prototype")
 public class TryAction extends ActionSupport {
 
-	// ===================属性驱动==================
+	// ===================【属性驱动】==================
 	private String name;
-
 	public String getName() {
 		return name;
 	}
-
 	public void setName(String name) {
 		this.name = name;
 	}
 
+	/*
+	 * 保存通过weui.js上传上来的图片的图片名称
+	 */
+	private String fileName;
+	public String getFileName() {
+		return fileName;
+	}
+	public void setFileName(String fileName) {
+		this.fileName = fileName;
+	}
+
 	// 提供给结果相应页面显示处理结果
 	private String result;
-
 	public String getResult() {
 		return result;
 	}
-
 	public void setResult(String result) {
 		this.result = result;
 	}
@@ -50,7 +58,7 @@ public class TryAction extends ActionSupport {
 		this.file = file;
 	}
 
-	// ====================Actions==================
+	// ====================【Actions】==================
 	public String tryRun() {
 		this.setName("我是一个测试Action，名字叫TryAction222");
 		return SUCCESS;
@@ -81,21 +89,67 @@ public class TryAction extends ActionSupport {
 		return "json";
 	}
 
+	/**
+	 * 响应从weui.js上传上来的图片的AJAX请求
+	 * 
+	 * @return
+	 */
 	public String upload() {
 
-		System.out.println("name=" + this.name);
-		String target = ServletActionContext.getServletContext().getRealPath("/upload/" + name);
-		// 获得上传的文件
-		File targetFile = new File(target);
+		System.out.println("fileName=" + this.fileName);
+		Result4Ajax  r  =  new  Result4Ajax();
+		
+		// 检查用于存放上传图片的/upload路径是否存在，不存在则创建出来
+		String dir  =  ServletActionContext.getServletContext().getRealPath("/upload");
+		// 这里的targetFile是一个路径不是文件
+		File targetFile = new File(dir);
+		if(!targetFile.exists()){
+			targetFile.mkdirs();
+		}
+		// 正式创建用来存放上传图片的路径和file
+		String target = ServletActionContext.getServletContext().getRealPath("/upload/" + this.fileName);
+		// 而这里的targetFile才是真正的文件
+		targetFile  =  new  File(target);
 		// 通过struts2提供的FileUtils类拷贝
 		try {
 			FileUtils.copyFile(file, targetFile);
 		} catch (IOException e) {
 			e.printStackTrace();
+			r.setMessage("上传图片失败");
+			r.setResult(false);
+			
+			ActionContext.getContext().getValueStack().push(r);
+			return "json";
 		}
-		
-		// return null 表示不跳转到任何JSP页面，也不返回JSON。 所有处理结果都已HttpResponse响应正文中的内容为返回结果
-		return null;
+
+		r.setMessage("上传图片成功！");
+		r.setResult(true);
+		ActionContext.getContext().getValueStack().push(r);
+		return "json";
+	}
+
+	
+	
+	// ==========================【内部类】用于AJAX响应的domain======================
+	class Result4Ajax {
+		private String message;
+		private boolean result;
+
+		public String getMessage() {
+			return message;
+		}
+
+		public void setMessage(String message) {
+			this.message = message;
+		}
+
+		public boolean isResult() {
+			return result;
+		}
+
+		public void setResult(boolean result) {
+			this.result = result;
+		}
 	}
 
 }
