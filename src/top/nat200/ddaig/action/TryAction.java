@@ -10,7 +10,6 @@ import org.apache.struts2.ServletActionContext;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
-import com.google.zxing.Result;
 import com.opensymphony.xwork2.ActionContext;
 import com.opensymphony.xwork2.ActionSupport;
 
@@ -30,7 +29,7 @@ public class TryAction extends ActionSupport {
 	}
 
 	/*
-	 * 保存通过weui.js上传上来的图片的图片名称
+	 * 保存通过weui.js上传上来的图片的图片名称,是通过onBeforeSend() 自定义的一个请求参数
 	 */
 	private String fileName;
 	public String getFileName() {
@@ -49,7 +48,9 @@ public class TryAction extends ActionSupport {
 		this.result = result;
 	}
 
-	// 前端文件上传的文件（前端负责上传文件的input的name=“file”）
+	/*
+	 *  weui.uploader()的option中的fileVal字段所标注的上传文件的请求参数名
+	 */
 	private File file;
 	public File getFile() {
 		return file;
@@ -58,6 +59,69 @@ public class TryAction extends ActionSupport {
 		this.file = file;
 	}
 
+	/**
+	 * weui.js自带
+	 * 形如： image/jpeg   的上传file类型
+	 */
+	private String fileContentType;
+	
+	/**
+	 * weui.js自带
+	 * 形如：1.jpg
+	 */
+	private String fileFileName;
+	
+	/**
+	 * weui.js 自带
+	 * 
+	 */
+	private String lastModifiedDate;
+	
+	/**
+	 * weui.js 自带
+	 * 上传file的字节数
+	 */
+	private int size;
+	
+	/**
+	 * 与fileContentType相同
+	 */
+	private String type;
+	
+	public String getFileContentType() {
+		return fileContentType;
+	}
+	public void setFileContentType(String fileContentType) {
+		this.fileContentType = fileContentType;
+	}
+	public String getFileFileName() {
+		return fileFileName;
+	}
+	public void setFileFileName(String fileFileName) {
+		this.fileFileName = fileFileName;
+	}
+	public String getLastModifiedDate() {
+		return lastModifiedDate;
+	}
+	public void setLastModifiedDate(String lastModifiedDate) {
+		if("undefined".equals(lastModifiedDate)){
+			this.lastModifiedDate = "0";
+		}else{
+			this.lastModifiedDate = lastModifiedDate;
+		}
+	}
+	public int getSize() {
+		return size;
+	}
+	public void setSize(int size) {
+		this.size = size;
+	}
+	public String getType() {
+		return type;
+	}
+	public void setType(String type) {
+		this.type = type;
+	}
 	// ====================【Actions】==================
 	public String tryRun() {
 		this.setName("我是一个测试Action，名字叫TryAction222");
@@ -124,6 +188,7 @@ public class TryAction extends ActionSupport {
 
 		r.setMessage("上传图片成功！");
 		r.setResult(true);
+		
 		ActionContext.getContext().getValueStack().push(r);
 		return "json";
 	}
@@ -131,7 +196,13 @@ public class TryAction extends ActionSupport {
 	
 	
 	// ==========================【内部类】用于AJAX响应的domain======================
-	class Result4Ajax {
+	
+	/**
+	 * 内部类必须也要加上public才能被struts-json.jar插件在组装JSON响应的时候被侦测到
+	 * @author Administrator
+	 *
+	 */
+	public class Result4Ajax {
 		private String message;
 		private boolean result;
 

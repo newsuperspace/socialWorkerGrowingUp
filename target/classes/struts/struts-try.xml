@@ -19,7 +19,6 @@
 	<package name="try" namespace="/" extends="base-package" strict-method-invocation="false">
 		<action name="tryAction_*"  method="{1}"   class="tryAction">
 				<result>/index.jsp</result>
-				<result name="upload">/upload.jsp</result>
 				<result type="json" name="json"></result>
 		</action>
 	</package>
